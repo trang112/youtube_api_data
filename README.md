@@ -90,7 +90,7 @@ base_url=https://www.googleapis.com/youtube/v3
 BQ_DATASET=jde_k1
 ```
  
-`GOOGLE_APPLICATION_CREDENTIALS` **must be omitted on the VM.** See [How the VM authenticates](#how-the-vm-authenticates-to-bigquery) — leaving it in makes the client look for a key file that does not exist there.
+`GOOGLE_APPLICATION_CREDENTIALS` **must be omitted on the VM.**
 
 
 **Getting an API key:** Google Cloud Console → APIs & Services → enable *YouTube Data API v3* → Credentials → Create API key.
@@ -184,7 +184,7 @@ Top-level comments and replies live in the **same table**, distinguished by `par
 
 **`replies` returns at most 5 replies per comment.** Getting all of them requires the `/comments` endpoint with `parentId`, one request per top-level comment, which is not viable within the quota. This is a known limitation, not a bug.
 
-**`Comment counts` are incomplete for some videos. For a heavily-commented video, pagination can stop before the end when the API rejects a page token with 400 invalidPageToken, or when the max_pages cap is reached
+**`Comment counts`** are incomplete for some videos. For a heavily-commented video, pagination can stop before the end when the API rejects a page token with 400 invalidPageToken, or when the max_pages cap is reached
 
 ## Logging
  
