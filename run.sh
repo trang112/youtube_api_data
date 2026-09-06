@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "/home/trang/Documents/jde/Big Project 1" || exit 1
+cd "/home/trang/Documents/jde/Big Project 1 (Copy)" || exit 1
 mkdir -p logs
 
 echo "=== Run started at $(date '+%Y-%m-%d %H:%M:%S') ===" >> logs/cron.log

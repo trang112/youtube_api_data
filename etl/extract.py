@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-handle = "@Sontungmtp"
+
 api_key = os.getenv("api_key")
 base_url = os.getenv("base_url")
 
@@ -31,7 +31,7 @@ def setup_logging(level: str = "INFO") -> None:
     )
 
 
-def get_playlist_id(handle:str, api_key:str, base_url:str) -> str:
+def get_playlist_id(handle:str, api_key:str, base_url:str) -> tuple[str | None, str | None]:
     """
     Get playlist id of the channel through the end point /channels
     """
@@ -128,7 +128,7 @@ def get_videos_raw(video_id:list, base_url: str, api_key:str) -> list[dict]:
     return video_raw
 
 
-def get_comment_raw(video_id: list, base_url:str, api_key: str, maxResults:int = 100) -> list[dict]:
+def get_comment_raw(video_id: list, base_url:str, api_key: str, maxResults:int = 100, max_pages: int = 20) -> list[dict]:
     """
     Call the end point /commentThreads for each video, paginate up to max_pages.
     Return the raw payload per page.
@@ -137,12 +137,12 @@ def get_comment_raw(video_id: list, base_url:str, api_key: str, maxResults:int =
     for vid in video_id:
         page_token2 = None
         page = 0
-        while page < 20:
+        while page < max_pages:
             try:
                 r_comment = requests.get(f"{base_url}/commentThreads", timeout=30, params={
                     "part": "snippet,replies",
                     "videoId": vid,
-                    "maxResults": 100,
+                    "maxResults": maxResults,
                     "order": "time",
                     "textFormat": "plainText",
                     "pageToken":page_token2,
@@ -171,6 +171,7 @@ def get_comment_raw(video_id: list, base_url:str, api_key: str, maxResults:int =
 if __name__ == "__main__":
 
     setup_logging("INFO")
+    handle = "@Sontungmtp"
 
     logger.info("start pulling playlist...")
     view_count, uploads_id = get_playlist_id(handle,api_key,base_url)
@@ -185,8 +186,8 @@ if __name__ == "__main__":
     logger.info("got %d batches", len(video_raw))
 
     logger.info("start pulling comments for videos...")
-    comment_raw = get_comment_raw(video_id, base_url, api_key,100)
-    logger.info('got %d',len(comment_raw))
+    comment_raw = get_comment_raw(video_id[:2], base_url, api_key,100,1)
+    logger.info('got %d pages',len(comment_raw))
     
    
     
