@@ -1,12 +1,12 @@
 [
   {"handle": "@sontungmtp",        "artist_name": "Sơn Tùng M-TP"},
-  {"handle": "@MyTamOfficial",     "artist_name": "Mỹ Tâm"},
-  {"handle": "@denvauofficial",    "artist_name": "Đen Vâu"},
-  {"handle": "@hoaminzyofficial",  "artist_name": "Hòa Minzy"},
-  {"handle": "@QuangHungMasterD",  "artist_name": "Quang Hùng MasterD"},
+  {"handle": "@MyTam",     "artist_name": "Mỹ Tâm"},
+  {"handle": "@@DenVau1305",    "artist_name": "Đen Vâu"},
+  {"handle": "@hoaminzy3105",  "artist_name": "Hòa Minzy"},
+  {"handle": "@quanghung.masterd",  "artist_name": "Quang Hùng MasterD"},
   {"handle": "@bichphuongofficial","artist_name": "Bích Phương"},
   {"handle": "@HieuthuhaiOfficial","artist_name": "HIEUTHUHAI"},
-  {"handle": "@MyMy-Amee",         "artist_name": "AMEE"},
-  {"handle": "@ericnamofficial",   "artist_name": "Erik"},
+  {"handle": "@anhtuatus8279",         "artist_name": "Anh Tú Atus"},
+  {"handle": "@ERIKOfficial",   "artist_name": "Erik"},
   {"handle": "@BinzDaPoet",        "artist_name": "Binz"}
 ]
