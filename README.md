@@ -1,8 +1,6 @@
 # YouTube Channel ETL Pipeline
 
-An ETL pipeline that pulls video and comment data for a list of YouTube channels via the YouTube Data API v3, stores the raw payloads as JSON, flattens them into tables, and loads them into BigQuery.
-
-Channels are defined in `artists.json` and processed one after another in a single run.
+An ETL pipeline that pulls video and comment data for a YouTube channel via the YouTube Data API v3, stores the raw payloads as JSON, flattens them into tables, and loads them into BigQuery.
 
 ## Data flow
 
@@ -10,20 +8,18 @@ Channels are defined in `artists.json` and processed one after another in a sing
 YouTube Data API v3
       │
       ▼  extract.py    — call API, paginate, handle errors
-  data/raw/*.json      — raw payload, verbatim, one file per artist
+  data/raw/*.json      — raw payload, verbatim
       │
       ▼  transform.py  — flatten, normalise data types
-  data/staged/*.csv    — processed tables, one file per artist
+  data/staged/*.csv    — processed tables
       │
       ▼  load.py       — add source + ingested_at
-  BigQuery             — all artists in one table
+  BigQuery
 ```
 
 The raw payload is saved **before** any processing. If the transform logic turns out to be wrong, the JSON can be reloaded without calling the API again — this saves quota and avoids losing data that may no longer be available.
 
 ## The four API calls
-
-Run once per artist:
 
 | Step | Endpoint | Input | Output |
 |---|---|---|---|
@@ -38,22 +34,20 @@ Each step feeds the next. There is no endpoint that goes directly from a channel
 
 ```
 Big Project 1/
-├── main.py                 # CLI entry point, loops over artists
-├── artists.json            # input: which channels to pull
+├── main.py                 # CLI entry point, orchestrates the pipeline
 ├── run.sh                  # wrapper script for cron
-├── test.ipynb              # scratch notebook for 1 artist
 ├── requirements.txt
 ├── .env                    # credentials (not committed)
 ├── example.env             # template, no real values
 ├── .gitignore
 ├── etl/
 │   ├── __init__.py
-│   ├── extract.py          # API calls, pagination, error handling
-│   ├── transform.py        # flatten JSON → DataFrame, save raw/staged
+│   ├── extract.py          # API calls, 
+│   ├── transform.py        # flatten JSON → 
 │   └── load.py             # load DataFrame into BigQuery
 ├── data/
-│   ├── raw/                # video_raw_<slug>.json, comment_raw_<slug>.json
-│   └── staged/             # video_table_<slug>.csv, comment_table_<slug>.csv
+│   ├── raw/                # video_raw.json, 
+│   └── staged/             # video_table.csv, 
 └── logs/
     └── cron.log
 ```
@@ -61,27 +55,47 @@ Big Project 1/
 ## Setup
 
 ```bash
+git clone https://github.com/trang112/youtube_api_data.git
+cd youtube_api_data
+ 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt pandas-gbq
+ 
+cp example.env .env        # then fill it in — see below
+python main.py --top-n 3 --skip-load
 ```
 
-Requires Python 3.10+ (uses `list[dict]` and `str | None` type hints).
 
-## Configuration
+Requires Python 3.10+ (uses `list[dict]` type hints).
 
-Create `.env` in the project root:
-
+### Configuration
+ 
+`.env` is **different on the VM than on a local machine**. This is the one file that is not managed by git.
+ 
+### Local
+ 
 ```
 api_key=<YouTube Data API v3 key>
 base_url=https://www.googleapis.com/youtube/v3
 BQ_DATASET=jde_k1
 GOOGLE_APPLICATION_CREDENTIALS=/home/trang/keys/service-account.json
 ```
+ 
+### On the VM — three lines only
+ 
+```
+api_key=<YouTube Data API v3 key>
+base_url=https://www.googleapis.com/youtube/v3
+BQ_DATASET=jde_k1
+```
+ 
+`GOOGLE_APPLICATION_CREDENTIALS` **must be omitted on the VM.** See [How the VM authenticates](#how-the-vm-authenticates-to-bigquery) — leaving it in makes the client look for a key file that does not exist there.
+
 
 **Getting an API key:** Google Cloud Console → APIs & Services → enable *YouTube Data API v3* → Credentials → Create API key.
 
-**Service account:** keep the JSON file **outside** the project directory. Two IAM roles are required:
+**Service account:** keep the JSON file **outside** the project directory and restrict it with `chmod 600`. Two IAM roles are required:
 
 | Role | Grants |
 |---|---|
@@ -94,38 +108,12 @@ The dataset must exist before loading. The load job creates tables automatically
 bq mk --location=asia-southeast1 jde_k1
 ```
 
-## Defining the artists
-
-`artists.json` is a JSON **list** of objects (hand filling). Both fields are required:
-
-```json
-[
-  {"handle": "@sontungmtp", "artist_name": "Sơn Tùng M-TP"},
-  {"handle": "@denvauofficial", "artist_name": "Đen Vâu"}
-]
-```
-
-| Field | Meaning |
-|---|---|
-| `handle` | The channel handle from the URL — `youtube.com/@sontungmtp` → `@sontungmtp`. Passed straight to `/channels?forHandle=`. Case-insensitive. |
-| `artist_name` | A label we choose, written into every row. Not an API field. |
-
-`handle` also determines the output filenames. `handle_slug()` strips the `@`, lowercases, and replaces anything outside `[a-z0-9]` with `_`:
-
-```
-@Son-Tung.MTP  →  son_tung_mtp  →  data/staged/video_table_son_tung_mtp.csv
-```
-
-
-**Verify handles before the first run.** A handle that does not exist returns an HTTP error and the artist is skipped, but a handle that resolves to the *wrong* channel fails silently — the pipeline will happily ingest someone else's videos under your `artist_name`. Open `youtube.com/<handle>` in a browser for each entry.
-
 ## Running
 
 ```bash
-python main.py                          # all artists in artists.json
-python main.py --skip-load              # extract + transform only, no BigQuery write
-python main.py --top-n 3                # 3 videos per artist instead of 10
-python main.py --artist-file test.json  # a different artist list
+python main.py
+python main.py --handle "@denvau" --artist-name "Đen Vâu"
+python main.py --top-n 3 --max-pages 2
 python main.py --help
 ```
 
@@ -133,54 +121,19 @@ python main.py --help
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--artist-file` | `artists.json` | Path to the JSON list of channels |
-| `--top-n` | `10` | Videos per artist to pull comments for (highest view count) |
-| `--write-disposition` | `WRITE_TRUNCATE` | Applies to the **first** artist only — see below |
-| `--skip-load` | off | Run extract + transform, write CSV, skip BigQuery |
+| `--handle` | `@Sontungmtp` | Channel handle |
+| `--artist-name` | `Son Tung M-TP` | Business label, not taken from the API |
+| `--top-n` | `10` | Number of videos to pull comments for (highest view count) |
+| `--max-pages` | `20` | Max comment pages per video (100 comments per page) |
+| `--write-disposition` | `WRITE_TRUNCATE` | `WRITE_APPEND` to append / `WRITE_TRUNCATE` to replace (Applies to the first artist only- the following artists use write append)|
 | `--log-level` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
-| `--max-pages` | `20` | **Not wired up** — see Known gaps |
 
-For a first run, use `--top-n 3 --skip-load` to exercise the whole pipeline cheaply without touching BigQuery.
-
-### Write disposition across multiple artists
-
-`WRITE_TRUNCATE` replaces the whole table. Applying it to every artist in the loop would mean each artist wipes the previous one, leaving only the last artist's data. `main.py` therefore applies the flag to the first artist only:
-
-```python
-disposition = args.write_disposition if i == 0 else "WRITE_APPEND"
-```
-
-| Run | Artist 1 | Artists 2–10 | Result |
-|---|---|---|---|
-| `--write-disposition WRITE_TRUNCATE` (default) | truncate + write | append | table holds exactly this run |
-| `--write-disposition WRITE_APPEND` | append | append | this run is added to what was already there |
-
-**Consequence of loading inside the loop:** if artist 5 fails, artists 1–4 are already in BigQuery. The run leaves a partial table rather than rolling back. Acceptable here because the next full run truncates anyway.
-
-### Failure handling
-
-Each artist is wrapped in `try/except`. A failure logs the traceback and moves on, so one dead channel does not lose the other nine:
-
-```
-[ericnamofficial] FAILED, skipping
-Traceback (most recent call last):
-  ...
-```
-
-Note that `extract.py` also swallows HTTP errors internally and returns empty results, so some failures surface as an artist with 0 videos rather than as an exception. Check the row counts in the log, not just the absence of tracebacks.
+For a first run, use `--top-n 3 --max-pages 2` to exercise the whole pipeline for roughly 10 quota units.
 
 ## Quota
 
 The default limit is **10,000 units per day**, resetting at midnight Pacific time (around 14:00–15:00 Vietnam time).
 
-| Endpoint | Cost |
-|---|---|
-| `channels`, `playlistItems`, `videos`, `commentThreads` | 1 |
-| `search` | **100** — not used in this pipeline |
-
-This pipeline deliberately avoids `search.list`. Listing a channel's videos goes through the `uploads` playlist (1 unit) instead of `search` (100 units).
-
-Rough cost for one artist with ~220 videos, `--top-n 10`:
 
 | Step | Calls |
 |---|---|
@@ -189,12 +142,10 @@ Rough cost for one artist with ~220 videos, `--top-n 10`:
 | `/videos` | 5 (50 ids per batch) |
 | `/commentThreads` | up to 200 (10 videos × 20 pages) |
 | **Total** | **~210** |
-
-**Ten artists is roughly 2,100 units, so about 4 full runs per day.** Comments dominate the cost: they are ~95% of the total. Lowering `--top-n` is the cheapest lever.
+ 
+**Ten artists is roughly 2,100 units, so about 4 full runs per day.**
 
 ## Output tables
-
-Both tables hold **all artists together**, separated by `artist_name`.
 
 ### `youtube_video_table`
 
@@ -203,7 +154,7 @@ Both tables hold **all artists together**, separated by `artist_name`.
 | Identifiers | `artist_name`, `channel_id`, `channel_title`, `video_id` |
 | Content | `video_title`, `description`, `published_at`, `duration`, `tags`, `category_id` |
 | Statistics | `view_count`, `like_count`, `comment_count` |
-| Pipeline | `_extracted_at`, `source`, `ingested_at` |
+| Pipeline | `extracted_at`, `source`, `ingested_at` |
 
 ### `youtube_comment_table`
 
@@ -212,7 +163,7 @@ Both tables hold **all artists together**, separated by `artist_name`.
 | Identifiers | `artist_name`, `channel_id`, `video_id`, `comment_id`, `parent_id` |
 | Content | `author_name`, `comment_text`, `published_at`, `updated_at` |
 | Engagement | `like_count`, `reply_count` |
-| Pipeline | `_extracted_at`, `source`, `ingested_at` |
+| Pipeline | `extracted_at`, `source`, `ingested_at` |
 
 Top-level comments and replies live in the **same table**, distinguished by `parent_id`:
 
@@ -223,17 +174,9 @@ Top-level comments and replies live in the **same table**, distinguished by `par
 
 ## Data notes
 
-**`artist_name` is a label we set ourselves**, not an API field. `channel_title` can be changed by the channel owner at any time, so it is not safe to use as a grouping key. Group by `artist_name` or `channel_id`.
+**`artist_name` is a label we set ourselves**, not an API field. `channel_title` can be changed by the channel owner at any time, so it is not safe to use as a grouping key.
 
-**`_extracted_at` keeps its leading underscore.** It is injected into the raw payload in `extract.py` and carried through, so the BigQuery column is `_extracted_at`, not `extracted_at`.
-
-**`tags` are joined with `|`**, not `,`, because YouTube tags can contain commas. To split them back out in BigQuery:
-
-```sql
-SELECT tag, COUNT(*) AS n
-FROM youtube_video_table, UNNEST(SPLIT(tags, '|')) AS tag
-GROUP BY tag ORDER BY n DESC
-```
+**`tags` are joined with `|`**, not `,`, because YouTube tags can contain commas. 
 
 **`NULL` is not `0`.** When a channel owner hides likes, the `likeCount` field is **absent** from the response — the pipeline writes `NULL`, not `0`. Same for `reply_count` on replies, which is `NULL` because a reply cannot have child replies.
 
@@ -241,67 +184,58 @@ GROUP BY tag ORDER BY n DESC
 
 **`replies` returns at most 5 replies per comment.** Getting all of them requires the `/comments` endpoint with `parentId`, one request per top-level comment, which is not viable within the quota. This is a known limitation, not a bug.
 
-**Channels with comments disabled return an empty comment table, not an error.** `build_comment_table` declares its columns explicitly so the DataFrame keeps its schema at 0 rows and the BigQuery load still succeeds.
+**`Comment counts` are incomplete for some videos. For a heavily-commented video, pagination can stop before the end when the API rejects a page token with 400 invalidPageToken, or when the max_pages cap is reached
 
 ## Logging
-
-Logs are written to both the terminal and, under cron, to `logs/cron.log`:
+ 
+Logs go to the terminal, and under `run.sh` to `logs/cron.log`:
 
 ```
-17:50:53 [INFO] channel sontungmtp: view count = 222 and upload id = UU...
 17:50:53 [INFO] Number of video = 222
-17:50:53 [INFO] Saved data/raw/video_raw_sontungmtp.json
-17:53:10 [INFO] Saved data/staged/comment_table_sontungmtp.csv: 27661 rows
-17:53:19 [INFO] [load] ingested 27661 rows to ...youtube_comment_table (WRITE_TRUNCATE)
+17:50:53 [INFO] Saved data/raw/video_raw.json
+17:53:10 [INFO] Saved data/staged/comment_table.csv: 27661 rows
+17:53:19 [INFO] [load] Loaded 27661 rows into ...youtube_comment_table (WRITE_TRUNCATE)
+
 ```
 
-Each artist's lines are prefixed with its slug, so `grep` isolates one channel out of a ten-artist run:
-
-```bash
-grep sontungmtp logs/cron.log
-```
 
 ## Scheduling with cron
 
 ```bash
 chmod +x run.sh
-./run.sh                              # always test manually first
+./run.sh                              # always #test manually first
 tail -50 logs/cron.log
-```
 
-The path inside `run.sh` is absolute and must match the real directory. Schedule for 07:00 and 23:00 daily:
-
-```bash
+#Schedule for 07:00 and 23:00 daily:
 crontab -e
+
+0 7,23 * * * "/home/trang/Documents/jde/Big Project 1/run.sh"
 ```
 
-```
-0 7,23 * * * "/home/trang/Documents/jde/Big Project 1 (Copy)/run.sh"
-```
 
-Two runs a day at ~2,100 units each stays within the 10,000 unit quota.
+**Limitation:** cron runs on the local machine. If the machine is off or suspended at 07:00, that run is simply skipped — cron does not catch up. For catch-up behaviour, move the job to Cloud Run Jobs with Cloud Scheduler.
+## Deployment on Google Cloud
 
-**Limitation:** cron runs on the local machine. If the machine is off or suspended at 07:00, that run is simply skipped — cron does not catch up. For catch-up behaviour, use a `systemd` timer with `Persistent=true`, or move the job to Cloud Run Jobs with Cloud Scheduler.
+1. Connect to the VM from a terminal
+2. Clone the repo onto the VM
+3. Put .env on the VM
+4. Grant the VM's service account access to datasets
+5. Reserve a static external IP (optional)
+6. Schedule with cron
 
-## Verifying a load
-
-```python
-from google.cloud import bigquery
-client = bigquery.Client()
-
-# Did every artist make it in?
-sql = f"""
-SELECT artist_name, COUNT(*) AS n_videos, MAX(ingested_at) AS last_load
-FROM `{client.project}.jde_k1.youtube_video_table`
-GROUP BY artist_name ORDER BY n_videos DESC
-"""
-for row in client.query(sql).result():
-    print(dict(row))
-
-# Are the column types right? view_count should be INT64
-table = client.get_table(f"{client.project}.jde_k1.youtube_video_table")
-for f in table.schema:
-    print(f.name, f.field_type)
+Install it:
+ 
+```bash
+chmod +x run.sh
+export EDITOR=nano
+crontab -e
+#add in the end
+0 7,23 * * * /home/trangbui112huyen/youtube_api_data/run.sh
 ```
 
-A missing `artist_name` means that artist failed or its handle resolved to nothing — check the log for its slug.
+## To do
+
+- [ ] Add a quota counter in `get_comment_raw` so the script stops before hitting the daily limit
+- [ ] Declare the BigQuery schema explicitly instead of relying on pandas type inference
+- [ ] Continue to transform data in Bigquery to create ready data for Data Analyst 
+- [ ] Connect with PBI to analyze data crawl
