@@ -159,7 +159,14 @@ def get_comment_raw(video_id: list, base_url:str, api_key: str, maxResults:int =
                     break
 
             except requests.exceptions.HTTPError as http_error:
-                logger.error("HTTP error occured: %s", http_error)
+                status = http_error.response.status_code
+                reason = ""
+                try:
+                    reason = http_error.response.json()["error"]["errors"][0]["reason"]
+                except Exception:
+                    pass
+                logger.warning("Comment stopped: video=%s page=%d status=%s reason=%s",
+                               vid, page, status, reason or "unknown")
                 break
                 # 429 Too Many Requests: API đang giới hạn số lượt gọi trong một khoảng thời gian
                 # (rate limit) — đây là lỗi rất thường gặp khi gọi API liên tục, không phải bug.
