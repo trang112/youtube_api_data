@@ -239,3 +239,6 @@ crontab -e
 - [ ] Declare the BigQuery schema explicitly instead of relying on pandas type inference
 - [ ] Continue to transform data in Bigquery to create ready data for Data Analyst 
 - [ ] Connect with PBI to analyze data crawl
+
+## Results
+<img width="971" height="765" alt="image" src="https://github.com/user-attachments/assets/ef27076a-d2ad-4c7b-bcf3-de7bbd2d59ff" />
